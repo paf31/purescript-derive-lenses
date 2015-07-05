@@ -41,13 +41,13 @@ import Data.Profunctor.Choice (Choice, right)
 import Data.Tree
 
 l :: forall r a f. (Functor f) => (a -> f a) -> { left :: a | r } -> f { left :: a | r }
-l f o = map(o{ left = _ })(f(o.left))
+l f o = map (o { l = _ }) (f o.l)
 
 value :: forall r a f. (Functor f) => (a -> f a) -> { value :: a | r } -> f { value :: a | r }
-value f o = map(o{ value = _ })(f(o.value))
+value f o = map (o { value = _ }) (f o.value)
 
 r :: forall r a f. (Functor f) => (a -> f a) -> { right :: a | r } -> f { right :: a | r }
-r f o = map(o{ right = _ })(f(o.right))
+r f o = map (o { r = _ }) (f o.r)
 
 _Leaf :: forall a p f. (Applicative f, Choice p) => p Unit (f Unit) -> p (Tree a) (f (Tree a))
 _Leaf p = dimap unwrap (pure <<< rewrap) (right p)
