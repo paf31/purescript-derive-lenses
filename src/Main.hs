@@ -17,7 +17,7 @@ parse :: String -> Either P.MultipleErrors [P.Module]
 parse s = map snd <$> P.parseModulesFromFiles id [("input", s)]
 
 process :: P.Module -> (P.ModuleName, [Optic])
-process (P.Module _ mn ds _) = (mn, concatMap processDecl ds)
+process (P.Module _ _ mn ds _) = (mn, concatMap processDecl ds)
   where
   processDecl :: P.Declaration -> [Optic]
   processDecl (P.DataDeclaration _ nm args dctors) = 
