@@ -1,14 +1,17 @@
 {-# LANGUAGE PatternGuards #-}
 
 module Main where
-    
+
 import Data.Maybe (mapMaybe)
-    
+
 import Control.Applicative
-    
+
 import qualified Language.PureScript as P
 
-data Optic 
+import Text.PrettyPrint.Boxes ((<>))
+import qualified Text.PrettyPrint.Boxes as Box
+
+data Optic
   = DataMemberLens String
   | DataConstructorPrism P.ProperName P.Type (Maybe P.Type)
   deriving Show
@@ -20,133 +23,77 @@ process :: P.Module -> (P.ModuleName, [Optic])
 process (P.Module _ _ mn ds _) = (mn, concatMap processDecl ds)
   where
   processDecl :: P.Declaration -> [Optic]
-  processDecl (P.DataDeclaration _ nm args dctors) = 
+  processDecl (P.DataDeclaration _ nm args dctors) =
     concatMap member dctors ++ mapMaybe ctor dctors
-    where 
-    member (_, [P.TypeApp obj r]) 
+    where
+    member (_, [P.TypeApp obj r])
       | P.tyObject == obj = map (DataMemberLens . fst) (fst (P.rowToList r))
     member _ = []
-    
+
     ctor (dctor, [inner]) = Just (DataConstructorPrism dctor outer (Just inner))
     ctor (dctor, []) = Just (DataConstructorPrism dctor outer Nothing)
     ctor _ = Nothing
-    
+
     outer :: P.Type
     outer = foldl P.TypeApp (P.TypeConstructor (P.Qualified Nothing nm)) (map (P.TypeVar . fst) args)
   processDecl (P.PositionedDeclaration _ _ d) = processDecl d
   processDecl _ = []
-  
-printModule :: P.ModuleName -> [Optic] -> String
-printModule mn = unlines . (preamble ++) . concatMap printLens
+
+printModule :: P.ModuleName -> [Optic] -> Box.Box
+printModule mn = Box.vsep 1 Box.left . (preamble :) . map renderOptic
   where
-  preamble :: [String]
-  preamble = 
-    [ "module " ++ show mn ++ ".Lenses where"
+  preamble :: Box.Box
+  preamble = Box.text . unlines $
+    [ "module " ++ P.runModuleName mn ++ ".Lenses where"
     , ""
-    , "import Prelude"
-    , ""
+    , "import Prelude (Unit, unit, const)"
+    , "import Data.Lens (Lens, PrismP, lens, prism)"
     , "import Data.Either (Either(..))"
-    , "import Data.Profunctor (dimap)"
-    , "import Data.Profunctor.Choice (Choice, right)"
-    , ""
-    , "import " ++ show mn
-    , ""
+    , "import " ++ P.runModuleName mn
     ]
-      
-  printLens :: Optic -> [String]
-  printLens (DataMemberLens prop) =
-    [ prop ++ " :: " ++ P.prettyPrintType lensTy
-    , prop ++ " f o = " ++ P.prettyPrintValue lens
-    , ""
+
+  renderOptic :: Optic -> Box.Box
+  renderOptic (DataMemberLens prop) = Box.vcat Box.left
+    [ Box.text (prop ++ " :: forall a b r. Lens " ++ recTy "a" ++ " " ++ recTy "b" ++ " a b")
+    , Box.text (prop ++ " = lens _." ++ show prop ++ " (_ { " ++ show prop ++ " = _ })")
     ]
     where
-    lensTy :: P.Type
-    lensTy = P.quantify (P.ConstrainedType [functorF] (coalg a `P.function` coalg rec))
-      where
-      f :: P.Type
-      f = P.TypeVar "f"
-      
-      r :: P.Type
-      r = P.TypeVar "r"
-      
-      a :: P.Type
-      a = P.TypeVar "a"
-      
-      functorF :: P.Constraint
-      functorF = (P.Qualified Nothing (P.ProperName "Functor"), [f])
-      
-      rec :: P.Type
-      rec = P.tyObject `P.TypeApp` P.RCons prop a r
-      
-      coalg :: P.Type -> P.Type
-      coalg ty = ty `P.function` (f `P.TypeApp` ty)
-    
-    lens :: P.Expr
-    lens = P.App (P.App _map updater) (P.App f (P.Accessor prop o))
-      where
-      f :: P.Expr
-      f = P.Var (P.Qualified Nothing (P.Ident "f"))
-      
-      o :: P.Expr
-      o = P.Var (P.Qualified Nothing (P.Ident "o"))
-      
-      _map :: P.Expr
-      _map = P.Var (P.Qualified Nothing (P.Ident "map"))
-      
-      updater :: P.Expr
-      updater = P.ObjectUpdater (Just o) [(prop, Nothing)] 
-  printLens (DataConstructorPrism dctor outer (Just inner)) =
-    [ name ++ " :: " ++ P.prettyPrintType (prismTy inner outer)
-    , name ++ " p = dimap unwrap rewrap (right p)"
-    , "  where"
-    , "  unwrap (" ++ show dctor ++ " x) = Right x"
-    , "  unwrap y = Left y"
-    , "  rewrap (Left y) = pure y"
-    , "  rewrap (Right x) = map " ++ show dctor ++ " x"
-    , ""
+    recTy :: String -> String
+    recTy ty = "{ " ++ show prop ++ " :: " ++ ty ++ " | r }"
+  renderOptic (DataConstructorPrism dctor outer (Just inner)) = Box.vcat Box.left
+    [ Box.text (name ++ " :: ") <> P.typeAsBox (P.quantify (prismTy inner outer))
+    , Box.text (name ++ " = prism " ++ P.runProperName dctor ++ " unwrap")
+    , Box.text   "  where"
+    , Box.text $ "  unwrap (" ++ P.runProperName dctor ++ " x) = Right x"
+    , Box.text   "  unwrap y = Left y"
     ]
     where
     name :: String
-    name = '_' : show dctor 
-  printLens (DataConstructorPrism dctor outer Nothing) =
-    [ name ++ " :: " ++ P.prettyPrintType (prismTy unit outer)
-    , name ++ " p = dimap unwrap (pure <<< rewrap) (right p)"
-    , "  where"
-    , "  unwrap " ++ show dctor ++ " = Right unit"
-    , "  unwrap y = Left y"
-    , "  rewrap (Left y) = y"
-    , "  rewrap (Right _) = " ++ show dctor
-    , ""
+    name = '_' : P.runProperName dctor
+  renderOptic (DataConstructorPrism dctor outer Nothing) = Box.vcat Box.left
+    [ Box.text (name ++ " :: ") <> P.typeAsBox (P.quantify (prismTy unit outer))
+    , Box.text (name ++ " = prism (const " ++ P.runProperName dctor ++ ") unwrap")
+    , Box.text   "  where"
+    , Box.text $ "  unwrap " ++ P.runProperName dctor ++ " = Right unit"
+    , Box.text   "  unwrap y = Left y"
     ]
     where
     unit :: P.Type
-    unit = P.TypeConstructor (P.Qualified Nothing (P.ProperName "Unit"))   
-        
+    unit = P.TypeConstructor (P.Qualified Nothing (P.ProperName "Unit"))
+
     name :: String
-    name = '_' : show dctor    
-    
+    name = '_' : P.runProperName dctor
+
   prismTy :: P.Type -> P.Type -> P.Type
-  prismTy inner outer = P.quantify (P.ConstrainedType [applicativeF, choiceP] (coalg inner `P.function` coalg outer))
+  prismTy inner outer = _Prism `P.TypeApp` outer `P.TypeApp` inner
     where
-    f :: P.Type
-    f = P.TypeVar "f"
-    
-    p :: P.Type
-    p = P.TypeVar "p"
-    
-    applicativeF :: P.Constraint
-    applicativeF = (P.Qualified Nothing (P.ProperName "Applicative"), [f])
-    
-    choiceP :: P.Constraint
-    choiceP = (P.Qualified Nothing (P.ProperName "Choice"), [p])
-    
-    coalg :: P.Type -> P.Type
-    coalg ty = P.TypeApp (P.TypeApp p ty) (P.TypeApp f ty)
+    _Prism :: P.Type
+    _Prism = P.TypeConstructor (P.Qualified Nothing (P.ProperName "PrismP"))
 
 app :: String -> String
-app input = 
+app input =
   case parse input of
     Left errs -> show errs
-    Right ms -> unlines (map (uncurry printModule . process) ms)
+    Right ms -> P.renderBox $ Box.vsep 1 Box.left (map (uncurry printModule . process) ms)
 
 main = interact app

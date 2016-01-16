@@ -13,7 +13,7 @@ This tool generates the following types of optics:
 - Prisms for data constructors which have zero or one argument
 - Lenses for object fields appearing in data constructors
 
-Instead of importing `purescript-lens`, the generated module directly uses the underlying modules (`Data.Profunctor` etc.) to keep the dependency set minimal. However, the generated lenses are compatible with the `purescript-lens` set of libraries.
+The generated lenses are compatible with the `purescript-profunctor-lenses` library.
 
 ## Example
 
@@ -23,7 +23,7 @@ Input file:
 module Data.Tree where
 
 data Tree a
-  = Leaf 
+  = Leaf
   | Branch { l :: Tree a, value :: a, r :: Tree a }
 ```
 
@@ -32,43 +32,35 @@ Output file:
 ```purescript
 module Data.Tree.Lenses where
 
-import Prelude
+l :: forall a b r. Data.Lens.Lens { "l": a } { "l": b } a b
+l = Data.Lens.lens _."l" (_ { "l" = _ })
 
-import Data.Either (Either(..))
-import Data.Profunctor (dimap)
-import Data.Profunctor.Choice (Choice, right)
+value :: forall a b r. Data.Lens.Lens { "value": a } { "value": b } a b
+value = Data.Lens.lens _."value" (_ { "value" = _ })
 
-import Data.Tree
+r :: forall a b r. Data.Lens.Lens { "r": a } { "r": b } a b
+r = Data.Lens.lens _."r" (_ { "r" = _ })
 
-l :: forall r a f. (Functor f) => (a -> f a) -> { left :: a | r } -> f { left :: a | r }
-l f o = map (o { l = _ }) (f o.l)
-
-value :: forall r a f. (Functor f) => (a -> f a) -> { value :: a | r } -> f { value :: a | r }
-value f o = map (o { value = _ }) (f o.value)
-
-r :: forall r a f. (Functor f) => (a -> f a) -> { right :: a | r } -> f { right :: a | r }
-r f o = map (o { r = _ }) (f o.r)
-
-_Leaf :: forall a p f. (Applicative f, Choice p) => p Unit (f Unit) -> p (Tree a) (f (Tree a))
-_Leaf p = dimap unwrap (pure <<< rewrap) (right p)
+_Leaf :: forall a. Data.Lens.PrismP (Data.Tree.Tree a) Unit
+_Leaf = Data.Lens.prism (Prelude.const Data.Tree.Leaf) unwrap
   where
-  unwrap Leaf = Right unit
-  unwrap y = Left y
-  rewrap (Left y) = y
-  rewrap (Right _) = Leaf
+  unwrap Data.Tree.Leaf = Data.Either.Right Prelude.unit
+  unwrap y = Data.Either.Left y
 
-_Branch :: forall a p f. (Applicative f, Choice p) => p { right :: Tree a, value :: a, left :: Tree a } (f { right :: Tree a, value :: a, left :: Tree a }) -> p (Tree a) (f (Tree a))
-_Branch p = dimap unwrap rewrap (right p)
+_Branch :: forall a. Data.Lens.PrismP (Data.Tree.Tree a)
+                                      { r :: Data.Tree.Tree a
+                                      , value :: a
+                                      , l :: Data.Tree.Tree a
+                                      }
+_Branch = Data.Lens.prism Data.Tree.Branch unwrap
   where
-  unwrap (Branch x) = Right x
-  unwrap y = Left y
-  rewrap (Left y) = pure y
-  rewrap (Right x) = map Branch x
+  unwrap (Data.Tree.Branch x) = Data.Either.Right x
+  unwrap y = Data.Either.Left y
 ```
 
 These optics can now be composed in the usual ways:
 
 ```purescript
-leftRight :: forall a f. (Applicative f) => (Tree a -> f (Tree a)) -> Tree a -> f (Tree a)
+leftRight :: forall a. PrismP (Tree a) (Tree a)
 leftRight = r <<< _Branch <<< l <<< _Branch
 ```
