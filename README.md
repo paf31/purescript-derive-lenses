@@ -22,6 +22,8 @@ Input file:
 ```purescript
 module Data.Tree where
 
+type Foo = {foo :: Int}
+
 data Tree a
   = Leaf
   | Branch { l :: Tree a, value :: a, r :: Tree a }
@@ -32,30 +34,38 @@ Output file:
 ```purescript
 module Data.Tree.Lenses where
 
-l :: forall a b r. Data.Lens.Lens { "l": a } { "l": b } a b
-l = Data.Lens.lens _."l" (_ { "l" = _ })
+import Prelude (Unit, unit, const)
+import Data.Lens (Lens, PrismP, lens, prism)
+import Data.Either (Either(..))
+import Data.Tree
 
-value :: forall a b r. Data.Lens.Lens { "value": a } { "value": b } a b
-value = Data.Lens.lens _."value" (_ { "value" = _ })
 
-r :: forall a b r. Data.Lens.Lens { "r": a } { "r": b } a b
-r = Data.Lens.lens _."r" (_ { "r" = _ })
+foo :: forall a b r. Lens { "foo" :: a | r } { "foo" :: b | r } a b
+foo = lens _."foo" (_ { "foo" = _ })
 
-_Leaf :: forall a. Data.Lens.PrismP (Data.Tree.Tree a) Unit
-_Leaf = Data.Lens.prism (Prelude.const Data.Tree.Leaf) unwrap
+l :: forall a b r. Lens { "l" :: a | r } { "l" :: b | r } a b
+l = lens _."l" (_ { "l" = _ })
+
+value :: forall a b r. Lens { "value" :: a | r } { "value" :: b | r } a b
+value = lens _."value" (_ { "value" = _ })
+
+r :: forall a b r. Lens { "r" :: a | r } { "r" :: b | r } a b
+r = lens _."r" (_ { "r" = _ })
+
+_Leaf :: forall a. PrismP (Tree a) Unit
+_Leaf = prism (const Leaf) unwrap
   where
-  unwrap Data.Tree.Leaf = Data.Either.Right Prelude.unit
-  unwrap y = Data.Either.Left y
+  unwrap Leaf = Right unit
+  unwrap y = Left y
 
-_Branch :: forall a. Data.Lens.PrismP (Data.Tree.Tree a)
-                                      { r :: Data.Tree.Tree a
-                                      , value :: a
-                                      , l :: Data.Tree.Tree a
-                                      }
-_Branch = Data.Lens.prism Data.Tree.Branch unwrap
+_Branch :: forall a. PrismP (Tree a) { r :: Tree a
+                                     , value :: a
+                                     , l :: Tree a
+                                     }
+_Branch = prism Branch unwrap
   where
-  unwrap (Data.Tree.Branch x) = Data.Either.Right x
-  unwrap y = Data.Either.Left y
+  unwrap (Branch x) = Right x
+  unwrap y = Left y
 ```
 
 These optics can now be composed in the usual ways:
