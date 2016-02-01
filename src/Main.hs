@@ -22,12 +22,15 @@ parse s = map snd <$> P.parseModulesFromFiles id [("input", s)]
 process :: P.Module -> (P.ModuleName, [Optic])
 process (P.Module _ _ mn ds _) = (mn, concatMap processDecl ds)
   where
+  typeAppToLenses (P.TypeApp obj r)
+      | P.tyObject == obj = map (DataMemberLens . fst) (fst (P.rowToList r))
+  typeAppToLenses _ = []
   processDecl :: P.Declaration -> [Optic]
+  processDecl (P.TypeSynonymDeclaration _ _ ta) = typeAppToLenses ta
   processDecl (P.DataDeclaration _ nm args dctors) =
     concatMap member dctors ++ mapMaybe ctor dctors
     where
-    member (_, [P.TypeApp obj r])
-      | P.tyObject == obj = map (DataMemberLens . fst) (fst (P.rowToList r))
+    member (_, [ta]) = typeAppToLenses ta
     member _ = []
 
     ctor (dctor, [inner]) = Just (DataConstructorPrism dctor outer (Just inner))
