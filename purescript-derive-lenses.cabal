@@ -1,5 +1,5 @@
 name:                purescript-derive-lenses
-version:             0.1.0.0
+version:             0.9.1.0
 synopsis:            A tool to derive lenses for PureScript data types
 license:             MIT
 license-file:        LICENSE
@@ -12,6 +12,10 @@ cabal-version:       >=1.10
 
 executable purescript-derive-lenses
   main-is:             Main.hs
-  build-depends:       base >=4.7 && <4.9, boxes, purescript >= 0.7.6.1
+  build-depends:       base >=4.7 && <4.10,
+                       boxes,
+                       optparse-generic ==1.1.*,
+                       purescript >= 0.9.1
   hs-source-dirs:      src
   default-language:    Haskell2010
+  ghc-options:         -Werror -O
