@@ -1,14 +1,15 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Main where
 
-import           Control.Applicative
 import           Data.Maybe (fromMaybe, mapMaybe)
+import           Data.Text (pack, unpack)
 import qualified Language.PureScript as P
+import           Language.PureScript.Label (runLabel)
+import           Language.PureScript.PSString (decodeString)
 import           Options.Generic (Generic, ParseRecord, getRecord)
 import           Text.PrettyPrint.Boxes ((<>))
 import qualified Text.PrettyPrint.Boxes as Box
@@ -23,10 +24,12 @@ instance ParseRecord Options
 
 -- | An optic to be rendered during code generation.
 data Optic
-  = DataMemberLens String
+  = DataMemberLens P.Text
   -- ^ a lens for a record accessor
   | DataConstructorPrism (P.ProperName 'P.ConstructorName) P.Type (Maybe P.Type)
   -- ^ a prism for a data constructor (constructor name, outer type, inner type)
+  | DataConstructorIso (P.ProperName 'P.ConstructorName) P.Type (Maybe P.Type)
+  -- ^ an iso for a newtype (or its data equivalent)
   deriving Show
 
 -- | Turn a module into a list of optics for codegen.
@@ -35,16 +38,20 @@ process (P.Module _ _ mn ds _) =
     (mn, concatMap processDecl ds)
   where
     typeAppToLenses (P.TypeApp rec r)
-      | P.tyRecord == rec = map (DataMemberLens . fst) (fst (P.rowToList r))
+      | P.tyRecord == rec = DataMemberLens <$> mapMaybe (decodeString . runLabel . fst) (fst (P.rowToList r))
     typeAppToLenses _ = []
 
     processDecl :: P.Declaration -> [Optic]
     processDecl (P.TypeSynonymDeclaration _ _ ta) = typeAppToLenses ta
     processDecl (P.DataDeclaration _ nm args dctors) =
-        concatMap member dctors ++ mapMaybe ctor dctors
+        concatMap member dctors ++ isoOrPrism dctors
       where
         member (_, [ta]) = typeAppToLenses ta
         member _ = []
+
+        isoOrPrism [(dctor, [inner])] = [DataConstructorIso dctor outer (Just inner)]
+        isoOrPrism [(dctor, [])] = [DataConstructorIso dctor outer Nothing]
+        isoOrPrism _ = mapMaybe ctor dctors
 
         ctor (dctor, [inner]) = Just (DataConstructorPrism dctor outer (Just inner))
         ctor (dctor, []) = Just (DataConstructorPrism dctor outer Nothing)
@@ -68,55 +75,73 @@ codeGen thisModule sourceModule = Box.vsep 1 Box.left . (preamble :) . map rende
       , "import Prelude as Prelude"
       , "import Data.Lens as Lens"
       , "import Data.Either as Either"
-      , "import " ++ P.runModuleName sourceModule
+      , "import " ++ (unpack . P.runModuleName) sourceModule
       ]
 
     renderOptic :: Optic -> Box.Box
     renderOptic (DataMemberLens prop) = Box.vcat Box.left
-        [ Box.text (prop ++ " :: forall a b r. Lens.Lens " ++ recTy "a" ++ " " ++ recTy "b" ++ " a b")
-        , Box.text (prop ++ " = Lens.lens _." ++ show prop ++ " (_ { " ++ show prop ++ " = _ })")
+        [ Box.text (unpack prop ++ " :: forall a b r. Lens.Lens " ++ recTy "a" ++ " " ++ recTy "b" ++ " a b")
+        , Box.text (unpack prop ++ " = Lens.lens _." ++ show prop ++ " (_ { " ++ show prop ++ " = _ })")
         ]
       where
         recTy :: String -> String
         recTy ty = "{ " ++ show prop ++ " :: " ++ ty ++ " | r }"
     renderOptic (DataConstructorPrism dctor outer (Just inner)) = Box.vcat Box.left
-        [ Box.text (name ++ " :: ") <> P.typeAsBox (P.quantify (prismTy inner outer))
-        , Box.text (name ++ " = Lens.prism " ++ P.runProperName dctor ++ " unwrap")
+        [ Box.text (opticName dctor ++ " :: ") <> P.typeAsBox (P.quantify (prismTy inner outer))
+        , Box.text (opticName dctor ++ " = Lens.prism " ++ properName dctor ++ " unwrap")
         , Box.text   "  where"
-        , Box.text $ "    unwrap (" ++ P.runProperName dctor ++ " x) = Either.Right x"
+        , Box.text $ "    unwrap (" ++ properName dctor ++ " x) = Either.Right x"
         , Box.text   "    unwrap y = Either.Left y"
         ]
-      where
-        name :: String
-        name = '_' : P.runProperName dctor
     renderOptic (DataConstructorPrism dctor outer Nothing) = Box.vcat Box.left
-        [ Box.text (name ++ " :: ") <> P.typeAsBox (P.quantify (prismTy unit outer))
-        , Box.text (name ++ " = Lens.prism (Prelude.const " ++ P.runProperName dctor ++ ") unwrap")
+        [ Box.text (opticName dctor ++ " :: ") <> P.typeAsBox (P.quantify (prismTy unit outer))
+        , Box.text (opticName dctor ++ " = Lens.prism (Prelude.const " ++ properName dctor ++ ") unwrap")
         , Box.text   "  where"
-        , Box.text $ "    unwrap " ++ P.runProperName dctor ++ " = Either.Right Prelude.unit"
+        , Box.text $ "    unwrap " ++ properName dctor ++ " = Either.Right Prelude.unit"
         , Box.text   "    unwrap y = Either.Left y"
         ]
-      where
-        unit :: P.Type
-        unit = P.TypeConstructor (P.Qualified Nothing (P.ProperName "Prelude.Unit"))
+    renderOptic (DataConstructorIso dctor outer (Just inner)) = Box.vcat Box.left
+        [ Box.text (opticName dctor ++ " :: ") <> P.typeAsBox (P.quantify (isoTy inner outer))
+        , Box.text (opticName dctor ++ " = Lens.iso unwrap " ++ properName dctor)
+        , Box.text   "  where"
+        , Box.text $ "    unwrap (" ++ properName dctor ++ " x) = x"
+        ]
+    renderOptic (DataConstructorIso dctor outer Nothing) = Box.vcat Box.left
+        [ Box.text (opticName dctor ++ " :: ") <> P.typeAsBox (P.quantify (isoTy unit outer))
+        , Box.text (opticName dctor ++ " = Lens.iso unwrap (Prelude.const " ++ properName dctor ++ ")")
+        , Box.text   "  where"
+        , Box.text $ "    unwrap " ++ properName dctor ++ " = Prelude.unit"
+        ]
 
-        name :: String
-        name = '_' : P.runProperName dctor
+    unit :: P.Type
+    unit = P.TypeConstructor (P.Qualified Nothing (P.ProperName "Prelude.Unit"))
+
+    properName :: P.ProperName 'P.ConstructorName -> String
+    properName = unpack . P.runProperName
+
+    opticName :: P.ProperName 'P.ConstructorName -> String
+    opticName dctor = '_' : properName dctor
 
     prismTy :: P.Type -> P.Type -> P.Type
-    prismTy inner outer = _Prism `P.TypeApp` outer `P.TypeApp` inner
+    prismTy = opticTy "Lens.Prism'"
+
+    isoTy :: P.Type -> P.Type -> P.Type
+    isoTy = opticTy "Lens.Iso'"
+
+    opticTy :: P.Text -> P.Type -> P.Type -> P.Type
+    opticTy name inner outer = _Type `P.TypeApp` outer `P.TypeApp` inner
       where
-        _Prism :: P.Type
-        _Prism = P.TypeConstructor (P.Qualified Nothing (P.ProperName "Lens.PrismP"))
+        _Type :: P.Type
+        _Type = P.TypeConstructor (P.Qualified Nothing (P.ProperName name))
 
 -- | Transforms a source module (as text) into a module full of lenses (as text).
 app :: Options -> String -> String
 app Options{..} input =
-    case P.parseModuleFromFile id ("<input>", input) of
+    case P.parseModuleFromFile id ("<input>", pack input) of
       Left errs -> show errs
       Right (_, m) -> (P.renderBox . uncurry codeGen' . process) m
   where
-    codeGen' sourceModule = codeGen (fromMaybe (P.runModuleName sourceModule ++ ".Lenses") moduleName) sourceModule
+    codeGen' sourceModule = codeGen (fromMaybe ((unpack . P.runModuleName) sourceModule ++ ".Lenses") moduleName) sourceModule
 
 -- | 'main' is a wrapper for the 'app' function
 main :: IO ()
