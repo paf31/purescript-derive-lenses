@@ -34,43 +34,45 @@ Output file:
 ```purescript
 module Data.Tree.Lenses where
 
-import Prelude (Unit, unit, const)
-import Data.Lens (Lens, PrismP, lens, prism)
-import Data.Either (Either(..))
+import Prelude as Prelude
+import Data.Lens as Lens
+import Data.Either as Either
 import Data.Tree
 
 
-foo :: forall a b r. Lens { "foo" :: a | r } { "foo" :: b | r } a b
-foo = lens _."foo" (_ { "foo" = _ })
+foo :: forall a b r. Lens.Lens { "foo" :: a | r } { "foo" :: b | r } a b
+foo = Lens.lens _."foo" (_ { "foo" = _ })
 
-l :: forall a b r. Lens { "l" :: a | r } { "l" :: b | r } a b
-l = lens _."l" (_ { "l" = _ })
+l :: forall a b r. Lens.Lens { "l" :: a | r } { "l" :: b | r } a b
+l = Lens.lens _."l" (_ { "l" = _ })
 
-value :: forall a b r. Lens { "value" :: a | r } { "value" :: b | r } a b
-value = lens _."value" (_ { "value" = _ })
+value :: forall a b r. Lens.Lens { "value" :: a | r } { "value" :: b | r } a b
+value = Lens.lens _."value" (_ { "value" = _ })
 
-r :: forall a b r. Lens { "r" :: a | r } { "r" :: b | r } a b
-r = lens _."r" (_ { "r" = _ })
+r :: forall a b r. Lens.Lens { "r" :: a | r } { "r" :: b | r } a b
+r = Lens.lens _."r" (_ { "r" = _ })
 
-_Leaf :: forall a. PrismP (Tree a) Unit
-_Leaf = prism (const Leaf) unwrap
+_Leaf :: forall a. Lens.Prism' (Tree a) Prelude.Unit
+_Leaf = Lens.prism (Prelude.const Leaf) unwrap
   where
-  unwrap Leaf = Right unit
-  unwrap y = Left y
+    unwrap Leaf = Either.Right Prelude.unit
+    unwrap y = Either.Left y
 
-_Branch :: forall a. PrismP (Tree a) { r :: Tree a
-                                     , value :: a
-                                     , l :: Tree a
-                                     }
-_Branch = prism Branch unwrap
+_Branch :: forall a.
+             Lens.Prism' (Tree a)
+               { "l" :: Tree a
+               , "value" :: a
+               , "r" :: Tree a
+               }
+_Branch = Lens.prism Branch unwrap
   where
-  unwrap (Branch x) = Right x
-  unwrap y = Left y
+    unwrap (Branch x) = Either.Right x
+    unwrap y = Either.Left y
 ```
 
 These optics can now be composed in the usual ways:
 
 ```purescript
-leftRight :: forall a. PrismP (Tree a) (Tree a)
+leftRight :: forall a. Prism' (Tree a) (Tree a)
 leftRight = r <<< _Branch <<< l <<< _Branch
 ```

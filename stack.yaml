@@ -1,4 +1,8 @@
-resolver: nightly-2016-07-07
+resolver: lts-6.25
 
 packages:
 - '.'
+
+extra-deps:
+- purescript-0.10.5
+- bower-json-1.0.0.1
