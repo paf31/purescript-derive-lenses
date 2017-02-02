@@ -6,6 +6,25 @@ A little utility to derive lenses and prisms for data types in PureScript
 
 Provide a PureScript module on standard input, and a new module will be returned on standard output
 
+Command:
+
+```
+purescript-derive-lenses < ./test-files/Data.Tree.purs > ./test-files/Lenses.purs
+```
+
+Available options:
+```
+--moduleName                  "Name of the output module"
+--moduleImports               "Additional imports for the output module separated by | delimiter"
+--moduleImportsDelimiter      "Delimiter of additional imports for the output module"
+```
+
+Using options:
+```
+purescript-derive-lenses < ./test-files/Data.Tree.purs --moduleName My.Module --moduleImports "import A|import B" > ./test-files/Lenses.purs
+```
+
+
 ## How it Works
 
 This tool generates the following types of optics:
@@ -14,6 +33,7 @@ This tool generates the following types of optics:
 - Lenses for object fields appearing in data constructors
 
 The generated lenses are compatible with the `purescript-profunctor-lenses` library.
+
 
 ## Example
 
@@ -38,6 +58,7 @@ import Prelude as Prelude
 import Data.Lens as Lens
 import Data.Either as Either
 import Data.Tree
+import Data.Bar (Bar)
 
 
 foo :: forall a b r. Lens.Lens { "foo" :: a | r } { "foo" :: b | r } a b
