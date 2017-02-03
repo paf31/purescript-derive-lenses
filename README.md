@@ -15,13 +15,12 @@ purescript-derive-lenses < ./test-files/Data.Tree.purs > ./test-files/Lenses.pur
 Available options:
 ```
 --moduleName                  "Name of the output module"
---moduleImports               "Additional imports for the output module separated by | delimiter"
---moduleImportsDelimiter      "Delimiter of additional imports for the output module"
+--moduleImports               "List of additional imports for the output module"
 ```
 
 Using options:
 ```
-purescript-derive-lenses < ./test-files/Data.Tree.purs --moduleName My.Module --moduleImports "import A|import B" > ./test-files/Lenses.purs
+purescript-derive-lenses < ./test-files/Data.Tree.purs --moduleName My.Module --moduleImports "import A" --moduleImports "import B" > ./test-files/Lenses.purs
 ```
 
 
@@ -58,7 +57,6 @@ import Prelude as Prelude
 import Data.Lens as Lens
 import Data.Either as Either
 import Data.Tree
-import Data.Bar (Bar)
 
 
 foo :: forall a b r. Lens.Lens { "foo" :: a | r } { "foo" :: b | r } a b

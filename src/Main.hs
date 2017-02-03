@@ -5,7 +5,7 @@
 
 module Main where
 
-import           Data.List.Split              (splitOn)
+-- import           Data.List.Split              (splitOn)
 import           Data.Maybe                   (fromMaybe, mapMaybe)
 import           Data.Text                    (pack, unpack)
 import qualified Language.PureScript          as P
@@ -17,15 +17,15 @@ import qualified Text.PrettyPrint.Boxes       as Box
 
 -- | Options for the command line interface
 data Options = Options
-  { moduleName             :: Maybe String
+  { moduleName    :: Maybe String
   -- ^ the name to use for the output module
-  , moduleImports          :: Maybe String
-  -- ^ additional imports for the output module
-  , moduleImportsDelimiter :: Maybe String
-  -- ^ delimiter of additional imports for the output module
+  , moduleImports :: [String]
+  -- ^ list of additional imports for the output module
   } deriving (Generic, Show)
 
 instance ParseRecord Options
+
+type Imports = [String]
 
 -- | An optic to be rendered during code generation.
 data Optic
@@ -148,10 +148,8 @@ app Options{..} input =
   where
     codeGen' sourceModule = codeGen
         (fromMaybe ((unpack . P.runModuleName) sourceModule ++ ".Lenses") moduleName)
-        moduleImports'
+        moduleImports
         sourceModule
-    delimiter = fromMaybe "|" moduleImportsDelimiter
-    moduleImports' = (++) (splitOn delimiter $ fromMaybe "" moduleImports) []
 
 -- | 'main' is a wrapper for the 'app' function
 main :: IO ()
