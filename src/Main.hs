@@ -5,7 +5,6 @@
 
 module Main where
 
--- import           Data.List.Split              (splitOn)
 import           Data.Maybe                   (fromMaybe, mapMaybe)
 import           Data.Text                    (pack, unpack)
 import qualified Language.PureScript          as P
@@ -24,8 +23,6 @@ data Options = Options
   } deriving (Generic, Show)
 
 instance ParseRecord Options
-
-type Imports = [String]
 
 -- | An optic to be rendered during code generation.
 data Optic
