@@ -13,7 +13,9 @@ cabal-version:       >=1.10
 executable purescript-derive-lenses
   main-is:             Main.hs
   build-depends:       base >=4.7 && <4.10,
+                       array,
                        boxes,
+                       split,
                        text,
                        optparse-generic ==1.1.*,
                        purescript >= 0.10.5

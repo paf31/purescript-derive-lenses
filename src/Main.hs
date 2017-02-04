@@ -1,23 +1,25 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DataKinds         #-}
+{-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards   #-}
 
 module Main where
 
-import           Data.Maybe (fromMaybe, mapMaybe)
-import           Data.Text (pack, unpack)
-import qualified Language.PureScript as P
-import           Language.PureScript.Label (runLabel)
+import           Data.Maybe                   (fromMaybe, mapMaybe)
+import           Data.Text                    (pack, unpack)
+import qualified Language.PureScript          as P
+import           Language.PureScript.Label    (runLabel)
 import           Language.PureScript.PSString (decodeString)
-import           Options.Generic (Generic, ParseRecord, getRecord)
-import           Text.PrettyPrint.Boxes ((<>))
-import qualified Text.PrettyPrint.Boxes as Box
+import           Options.Generic              (Generic, ParseRecord, getRecord)
+import           Text.PrettyPrint.Boxes       ((<>))
+import qualified Text.PrettyPrint.Boxes       as Box
 
 -- | Options for the command line interface
 data Options = Options
-  { moduleName :: Maybe String
+  { moduleName    :: Maybe String
   -- ^ the name to use for the output module
+  , moduleImports :: [String]
+  -- ^ list of additional imports for the output module
   } deriving (Generic, Show)
 
 instance ParseRecord Options
@@ -65,8 +67,8 @@ process (P.Module _ _ mn ds _) =
     processDecl _ = []
 
 -- | Generate PureScript code for the output module.
-codeGen :: String -> P.ModuleName -> [Optic] -> Box.Box
-codeGen thisModule sourceModule = Box.vsep 1 Box.left . (preamble :) . map renderOptic
+codeGen :: String -> [String] -> P.ModuleName -> [Optic] -> Box.Box
+codeGen thisModule moduleImports sourceModule = Box.vsep 1 Box.left . (preamble :) . map renderOptic
   where
     preamble :: Box.Box
     preamble = Box.text . unlines $
@@ -76,7 +78,7 @@ codeGen thisModule sourceModule = Box.vsep 1 Box.left . (preamble :) . map rende
       , "import Data.Lens as Lens"
       , "import Data.Either as Either"
       , "import " ++ (unpack . P.runModuleName) sourceModule
-      ]
+      ] ++ moduleImports
 
     renderOptic :: Optic -> Box.Box
     renderOptic (DataMemberLens prop) = Box.vcat Box.left
@@ -141,7 +143,10 @@ app Options{..} input =
       Left errs -> show errs
       Right (_, m) -> (P.renderBox . uncurry codeGen' . process) m
   where
-    codeGen' sourceModule = codeGen (fromMaybe ((unpack . P.runModuleName) sourceModule ++ ".Lenses") moduleName) sourceModule
+    codeGen' sourceModule = codeGen
+        (fromMaybe ((unpack . P.runModuleName) sourceModule ++ ".Lenses") moduleName)
+        moduleImports
+        sourceModule
 
 -- | 'main' is a wrapper for the 'app' function
 main :: IO ()
