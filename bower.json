@@ -1,0 +1,21 @@
+{
+  "name": "purescript-derive-lenses-purs",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "output"
+  ],
+  "dependencies": {
+    "purescript-prelude": "^3.0.0",
+    "purescript-console": "^3.0.0",
+    "purescript-foreign": "^4.0.0",
+    "purescript-node-fs": "^4.0.0",
+    "purescript-yargs": "^3.0.0",
+    "purescript-foreign-generic": "^4.0.0",
+    "purescript-node-process": "^4.0.0"
+  },
+  "devDependencies": {
+    "purescript-psci-support": "^3.0.0"
+  }
+}
