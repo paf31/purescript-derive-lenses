@@ -1,38 +1,41 @@
 # purescript-derive-lenses
 
-A little utility to derive lenses and prisms for data types in PureScript
+A little utility to derive isos and prisms for data types in PureScript
 
 ## Usage
 
-Provide a PureScript module on standard input, and a new module will be returned on standard output
+First, build your project with `--dump-corefn`. Then, provide a PureScript
+`corefn.json` file with the `-i` argument and an output file with the `-o` argument.
 
 Command:
 
-```
-purescript-derive-lenses < ./test-files/Data.Tree.purs > ./test-files/Lenses.purs
+```bash
+# Compile source files with --dump-corefn
+purs compile --dump-corefn test-files/Data.Tree.purs
+
+# Build the output module
+pulp run -- -i output/Data.Tree/corefn.json -o test-files/Output.purs
 ```
 
 Available options:
+
 ```
---moduleName                  "Name of the output module"
---moduleImports               "List of additional imports for the output module"
+-i, --input        Input corefn.json file   [string] [required]
+-o, --output       Output PureScript module [string] [required]
+-m, --module-name  Generated module name    [string]
 ```
 
 Using options:
-```
-purescript-derive-lenses < ./test-files/Data.Tree.purs --moduleName My.Module --moduleImports "import A" --moduleImports "import B" > ./test-files/Lenses.purs
-```
 
+```bash
+pulp run -- -i output/Data.Tree/corefn.json -m My.Module -o test-files/My.Module.purs
+```
 
 ## How it Works
 
-This tool generates the following types of optics:
+This tool generates `Prism`s/`Iso`s for data constructors which have zero or one argument.
 
-- Prisms for data constructors which have zero or one argument
-- Lenses for object fields appearing in data constructors
-
-The generated lenses are compatible with the `purescript-profunctor-lenses` library.
-
+The generated optics are compatible with the `purescript-profunctor-lenses` library.
 
 ## Example
 
@@ -56,42 +59,27 @@ module Data.Tree.Lenses where
 import Prelude as Prelude
 import Data.Lens as Lens
 import Data.Either as Either
+
 import Data.Tree
 
+-- Tree
 
-foo :: forall a b r. Lens.Lens { "foo" :: a | r } { "foo" :: b | r } a b
-foo = Lens.lens _."foo" (_ { "foo" = _ })
+_Leaf = Lens.prism (Prelude.const Leaf) unwrap where
+  unwrap Leaf = Either.Right Prelude.unit
+  unwrap y = Either.Left y
 
-l :: forall a b r. Lens.Lens { "l" :: a | r } { "l" :: b | r } a b
-l = Lens.lens _."l" (_ { "l" = _ })
-
-value :: forall a b r. Lens.Lens { "value" :: a | r } { "value" :: b | r } a b
-value = Lens.lens _."value" (_ { "value" = _ })
-
-r :: forall a b r. Lens.Lens { "r" :: a | r } { "r" :: b | r } a b
-r = Lens.lens _."r" (_ { "r" = _ })
-
-_Leaf :: forall a. Lens.Prism' (Tree a) Prelude.Unit
-_Leaf = Lens.prism (Prelude.const Leaf) unwrap
-  where
-    unwrap Leaf = Either.Right Prelude.unit
-    unwrap y = Either.Left y
-
-_Branch :: forall a.
-             Lens.Prism' (Tree a)
-               { "l" :: Tree a
-               , "value" :: a
-               , "r" :: Tree a
-               }
-_Branch = Lens.prism Branch unwrap
-  where
-    unwrap (Branch x) = Either.Right x
-    unwrap y = Either.Left y
+_Branch = Lens.prism Branch unwrap where
+  unwrap (Branch x) = Either.Right x
+  unwrap y = Either.Left y
 ```
 
 These optics can now be composed in the usual ways:
 
 ```purescript
 leftRight :: forall a. Prism' (Tree a) (Tree a)
-leftRight = r <<< _Branch <<< l <<< _Branch
+leftRight =
+  prop (SProxy :: SProxy "r")
+  <<< _Branch
+  <<< prop (SProxy :: SProxy "l")
+  <<< _Branch
 ```
